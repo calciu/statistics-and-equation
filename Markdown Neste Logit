@@ -1,0 +1,100 @@
+---
+title: "Untitled"
+author: "M. Calciu"
+date: "10/12/2020"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+# Introduction
+The data set HC from mlogit contains data in R format on the choice of heating and central cooling system for 250 single-family, newly built houses in California.
+
+The alternatives are:
+
+    Gas central heat with cooling gcc,
+    Electric central resistence heat with cooling ecc,
+    Electric room resistence heat with cooling erc,
+    Electric heat pump, which provides cooling also hpc,
+    Gas central heat without cooling gc,
+    Electric central resistence heat without cooling ec,
+    Electric room resistence heat without cooling er.
+
+Heat pumps necessarily provide both heating and cooling such that heat pump without cooling is not an alternative.
+
+# Variables
+
+    depvar gives the name of the chosen alternative,
+    ich.alt are the installation cost for the heating portion of the system,
+    icca is the installation cost for cooling
+    och.alt are the operating cost for the heating portion of the system
+    occa is the operating cost for cooling
+    income is the annual income of the household
+
+Note that the full installation cost of alternative gcc is ich.gcc+icca, and similarly for the operating cost and for the other alternatives with cooling.
+
+    Run a nested logit model on the data for two nests and one log-sum coefficient that applies to both nests. Note that the model is specified to have the cooling alternatives (gcc,ecc, erc,hpc) in one nest and the non-cooling alternatives (gc, ec, er) in another nest.
+
+## Preparation des données
+Données initiales (280 obs et 18 variables)
+```{r message=FALSE, warning=FALSE}
+library("mlogit")
+library("dfidx")
+data("HC", package = "mlogit")
+head(HC)
+```
+
+Creating an two index table crossing the 250 observations and the 7 choice alternatives, varying variables ich.* and och.* with the alternatives. So the 7 ich.* columns (2:8) and the 7 och.* columns (10:16) are each collapsed into one and recorded rowwise
+
+```{r}
+HC <- dfidx(HC, varying = c(2:8, 10:16), choice = "depvar")
+head(HC)
+```
+# Creating helper variables
+Using the second index the cooling.mode variable indicates whether it belongs to the four cooling alternatives. Similarly room.modes  indicates whether it belongs to the two room alternatives.
+```{r}
+cooling.modes <- idx(HC, 2) %in% c('gcc', 'ecc', 'erc', 'hpc')
+head(cooling.modes)
+room.modes <- idx(HC, 2) %in% c('erc', 'er')
+head(room.modes)
+```
+Iinstallation / operating costs for cooling are constants,  only relevant for mixed systems
+```{r}
+HC$icca[! cooling.modes] <- 0
+HC$occa[! cooling.modes] <- 0
+head(HC)
+```
+# Creating additional variables 
+Create income variables for two sets cooling and rooms. Also create an intercept for cooling modes
+
+```{r}
+HC$inc.cooling <- HC$inc.room <- 0
+HC$inc.cooling[cooling.modes] <- HC$income[cooling.modes]
+HC$inc.room[room.modes] <- HC$income[room.modes]
+HC$int.cooling <- as.numeric(cooling.modes)
+head(HC)
+```
+
+# Model estimation
+Estimate the model with only one nest elasticity
+
+```{r}
+nl <- mlogit(depvar ~ ich + och +icca + occa + inc.room + inc.cooling + int.cooling | 0, HC,
+             nests = list(cooling = c('gcc','ecc','erc','hpc'), 
+                          other = c('gc', 'ec', 'er')), un.nest.el = TRUE)
+summary(nl)
+```
+
+
+## Predictions plots
+
+
+```{r , echo=FALSE}
+
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
